@@ -1,0 +1,27 @@
+services:
+  whatsapp-bridge:
+    build: ./whatsapp-bridge
+    container_name: whatsapp-bridge
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    volumes:
+      - whatsapp-store:/app/store
+
+  whatsapp-mcp:
+    build: ./whatsapp-mcp-server
+    container_name: whatsapp-mcp
+    restart: unless-stopped
+    environment:
+      - WHATSAPP_ALLOWED_JIDS=${WHATSAPP_ALLOWED_JIDS:-}
+      - WHATSAPP_MCP_HOST=0.0.0.0
+      - WHATSAPP_MCP_PORT=8090
+    volumes:
+      - whatsapp-store:/app/whatsapp-bridge/store:ro
+    ports:
+      - "127.0.0.1:8090:8090"
+    depends_on:
+      - whatsapp-bridge
+
+volumes:
+  whatsapp-store:

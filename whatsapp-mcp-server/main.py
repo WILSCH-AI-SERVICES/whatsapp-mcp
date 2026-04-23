@@ -105,19 +105,30 @@ def list_chats(
     page: int = 0,
     include_last_message: bool = True,
     sort_by: str = "last_active",
-) -> List[Dict[str, Any]]:
+) -> List[Any]:
     """Get WhatsApp chats matching specified criteria.
 
-    Filtered to allowlist when active.
+    Filtered to allowlist when active. Fetches larger window then filters
+    + paginates to avoid allowlist items being excluded by SQL limit.
     """
-    chats = whatsapp_list_chats(
+    if ALLOWLIST_ACTIVE:
+        chats = whatsapp_list_chats(
+            query=query,
+            limit=500,
+            page=0,
+            include_last_message=include_last_message,
+            sort_by=sort_by,
+        )
+        filtered = _filter_chats(chats)
+        start = page * limit
+        return filtered[start:start + limit]
+    return whatsapp_list_chats(
         query=query,
         limit=limit,
         page=page,
         include_last_message=include_last_message,
         sort_by=sort_by,
     )
-    return _filter_chats(chats)
 
 
 @mcp.tool()

@@ -1,4 +1,4 @@
-FROM golang:1.23-bookworm AS build
+FROM golang:1.24-bookworm AS build
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev && rm -rf /var/lib/apt/lists/*
 COPY go.mod go.sum ./

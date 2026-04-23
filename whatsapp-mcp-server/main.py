@@ -35,10 +35,16 @@ def _reject_if_blocked(chat_jid: Optional[str]) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _filter_chats(chats: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _jid_of(obj: Any) -> Optional[str]:
+    if isinstance(obj, dict):
+        return obj.get("jid") or obj.get("chat_jid")
+    return getattr(obj, "jid", None) or getattr(obj, "chat_jid", None)
+
+
+def _filter_chats(chats: List[Any]) -> List[Any]:
     if not ALLOWLIST_ACTIVE:
         return chats
-    return [c for c in chats if c.get("jid") in ALLOWED_JIDS]
+    return [c for c in chats if _jid_of(c) in ALLOWED_JIDS]
 
 
 mcp = FastMCP("whatsapp")
@@ -66,15 +72,15 @@ def list_messages(
     include_context: bool = True,
     context_before: int = 1,
     context_after: int = 1,
-) -> List[Dict[str, Any]]:
+) -> Any:
     """Get WhatsApp messages matching specified criteria with optional context.
 
     When allowlist is active and chat_jid is omitted, results are filtered
-    to allowlisted chats only.
+    to allowlisted chats only. Upstream returns a pre-formatted string.
     """
     blocked = _reject_if_blocked(chat_jid)
     if blocked:
-        return [blocked]
+        return blocked
     messages = whatsapp_list_messages(
         after=after,
         before=before,
@@ -87,8 +93,8 @@ def list_messages(
         context_before=context_before,
         context_after=context_after,
     )
-    if ALLOWLIST_ACTIVE and not chat_jid:
-        messages = [m for m in messages if m.get("chat_jid") in ALLOWED_JIDS]
+    if ALLOWLIST_ACTIVE and not chat_jid and isinstance(messages, list):
+        messages = [m for m in messages if _jid_of(m) in ALLOWED_JIDS]
     return messages
 
 
@@ -130,7 +136,7 @@ def get_direct_chat_by_contact(sender_phone_number: str) -> Dict[str, Any]:
     Result is rejected if the matched chat is not in the allowlist.
     """
     chat = whatsapp_get_direct_chat_by_contact(sender_phone_number)
-    if ALLOWLIST_ACTIVE and chat and chat.get("jid") not in ALLOWED_JIDS:
+    if ALLOWLIST_ACTIVE and chat and _jid_of(chat) not in ALLOWED_JIDS:
         return {"error": "matched chat not in allowlist"}
     return chat
 
@@ -163,8 +169,12 @@ def get_message_context(
     """
     context = whatsapp_get_message_context(message_id, before, after)
     if ALLOWLIST_ACTIVE:
-        target = context.get("message") if isinstance(context, dict) else None
-        if target and target.get("chat_jid") not in ALLOWED_JIDS:
+        target = None
+        if isinstance(context, dict):
+            target = context.get("message")
+        else:
+            target = getattr(context, "message", None)
+        if target and _jid_of(target) not in ALLOWED_JIDS:
             return {"error": "message's chat not in allowlist"}
     return context
 

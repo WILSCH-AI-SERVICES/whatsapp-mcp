@@ -3,62 +3,86 @@
 ## Definition of Done
 
 ### Pass 1: Repo + patches (fork)
-- [ ] Fork `lharries/whatsapp-mcp` → `MariusWilsch/whatsapp-mcp`
-- [ ] Branch `wilsch-patches` with: transport swap (streamable-http), JID allowlist, send tools removed
-- [ ] Docker stack (bridge Dockerfile, MCP Dockerfile, docker-compose.yml, .env.example)
-- [ ] Patches pushed to fork
+- [x] Fork `lharries/whatsapp-mcp` → `MariusWilsch/whatsapp-mcp`
+- [x] Branch `wilsch-patches` with: transport swap (streamable-http), JID allowlist, send tools removed
+- [x] Docker stack (bridge Dockerfile, MCP Dockerfile, docker-compose.yml, .env.example)
+- [x] Patches pushed to fork
 
 ### Pass 2: Deploy + pair on WILSCH
-- [ ] Clone fork into `~/projects/personal/whatsapp-mcp__full/` on WILSCH-AI-SERVER
-- [ ] `.env` with token B + empty `WHATSAPP_ALLOWED_JIDS`
-- [ ] `docker compose up -d --build`
-- [ ] Both containers Up (`docker ps` shows `whatsapp-bridge` + `whatsapp-mcp`)
-- [ ] QR pair with primary WhatsApp number (via `docker logs whatsapp-bridge`)
-- [ ] Messages syncing to SQLite (row count > 0)
+- [x] Clone fork into `~/projects/personal/whatsapp-mcp__full/` on WILSCH-AI-SERVER
+- [x] `.env` with token B + empty `WHATSAPP_ALLOWED_JIDS`
+- [x] `docker compose up -d --build`
+- [x] Both containers Up (`docker ps` shows `whatsapp-bridge` + `whatsapp-mcp`)
+- [x] QR pair with primary WhatsApp number (via `docker logs whatsapp-bridge`)
+- [x] Messages syncing to SQLite (row count > 0)
 
 ### Pass 3: Caddy publish + SSL
-- [ ] `/etc/caddy/conf.d/whatsapp-mcp.conf` created at `whatsapp-mcp.wilsch-deployment.com`
-- [ ] Bearer token B check enforced in Caddyfile
-- [ ] `systemctl reload caddy` successful
-- [ ] Valid SSL cert on subdomain (`curl -I` returns 200/401)
-- [ ] Public endpoint returns 401 without Bearer, 200+MCP with
+- [x] `/etc/caddy/conf.d/whatsapp-mcp.conf` created at `whatsapp-mcp.wilsch-deployment.com`
+- [x] Bearer token B check enforced in Caddyfile
+- [x] `systemctl reload caddy` successful
+- [x] Valid SSL cert on subdomain (`curl -I` returns 200/401)
+- [x] Public endpoint returns 401 without Bearer, 200+MCP with
 
 ### Pass 4: JID discovery + allowlist lock
-- [ ] `list_chats` returns JIDs after sync complete
-- [ ] User selects whitelist JIDs
-- [ ] `WHATSAPP_ALLOWED_JIDS` env updated, container restarted
-- [ ] Whitelisted JID queries succeed
-- [ ] Non-whitelisted JID queries return allowlist error
+- [x] `list_chats` returns JIDs after sync complete
+- [x] User selects whitelist JIDs
+- [x] `WHATSAPP_ALLOWED_JIDS` env updated, container restarted
+- [x] Whitelisted JID queries succeed
+- [x] Non-whitelisted JID queries return allowlist error
 
 ### Pass 5: MetaMCP registration
-- [ ] WhatsApp MCP added in MetaMCP UI (Streamable HTTP, URL + Authorization Bearer B)
-- [ ] Assigned to `hand-picked` namespace
-- [ ] Endpoint exists with token A
-- [ ] Tool list visible in MetaMCP inspector
+- [x] WhatsApp MCP added in MetaMCP UI (Streamable HTTP, URL + Authorization Bearer B)
+- [x] Assigned to `hand-picked` namespace
+- [x] Endpoint exists with token A
+- [x] Tool list visible in MetaMCP inspector
 
 ### Pass 6: End-to-end verification
-- [ ] Claude Code `hand-picked-tools` config points at MetaMCP endpoint
-- [ ] Tool call from Claude returns live message data from allowlisted chat
-- [ ] Non-allowlisted JID request returns rejection
+- [x] Claude Code `hand-picked-tools` config points at MetaMCP endpoint
+- [x] Tool call from Claude returns live message data from allowlisted chat
+- [x] Non-allowlisted JID request returns rejection
 
 ### Pass 7: Token persistence
-- [ ] `.env` on WILSCH has both tokens A + B
-- [ ] `agent-browser auth` vault entries exist locally for A and B
+- [x] `.env` on WILSCH has both tokens A + B
+- [x] `agent-browser auth` vault entries exist locally for A and B
 
 ### Pass 8: WILSCH cleanup
-- [ ] `/etc/caddy/conf.d/metamcp.conf` removed
-- [ ] Caddy reloaded
-- [ ] `metamcp-pg` container stopped + removed
-- [ ] Postgres volume still present (`docker volume ls`)
+- [x] `/etc/caddy/conf.d/metamcp.conf` removed
+- [x] Caddy reloaded
+- [x] `metamcp-pg` container stopped + removed
+- [x] Postgres volume still present (`docker volume ls`)
 
 ### Pass 9: MetaMCP namespace cleanup
-- [ ] `hand-picked` namespace contents captured before deletions
-- [ ] 4 namespaces deleted via agent-browser: `read-website-fast`, `supabase`, `sequential-thinking`, `fireflies`
-- [ ] Underlying MCP server entries preserved
-- [ ] No hand-picked tools broken
+- [x] `hand-picked` namespace contents captured before deletions
+- [x] 4 namespaces deleted via agent-browser: `read-website-fast`, `supabase`, `sequential-thinking`, `fireflies`
+- [x] Underlying MCP server entries preserved
+- [x] No hand-picked tools broken
 
 ### Pass 10: Post-completion sweep
-- [ ] Cross-server scan for additional orphan configs/containers documented
+- [x] Cross-server scan for additional orphan configs/containers documented
+
+### Pass 11: Restore upstream tool surface (read-only → read+send parity)
+
+Reverses the "send tools stripped" patch from Pass 1 commit `60f0022`. Per-client tool toggling delegated to MetaMCP UI rather than enforced at Python layer.
+
+- [x] Re-add imports for `send_message`, `send_file`, `send_audio_message` in `main.py`
+- [x] Re-add 3 `@mcp.tool()` definitions for those send tools
+- [x] Update module docstring (drop "stripped" reference, add tool-toggling-via-MetaMCP note)
+
+### Pass 12: Send allowlist split + Michael read access
+
+Adds independent send allowlist (security default = empty blocks all) and grants Michael Reichert 1:1 read access for backfill of Phase 1 sign-off.
+
+- [x] New env var `WHATSAPP_SEND_ALLOWED_JIDS` plumbed through `docker-compose.yml`
+- [x] `_reject_send_if_blocked()` gate added; called from each send tool
+- [x] `.env.example` updated with both vars + comments explaining semantics
+- [ ] On WILSCH `.env`: read list extended with `4915233772868@s.whatsapp.net` (Michael Reichert)
+- [ ] On WILSCH `.env`: send list set to `4917666990272@s.whatsapp.net` (David Eberle) + `120363405992061758@g.us` (Grooming Prep)
+- [ ] On WILSCH `.env`: block-comment JID→identity mapping above each list (future-self readability)
+- [ ] `docker compose build --no-cache whatsapp-mcp && docker compose up -d` clean
+- [ ] Smoke: read on Michael's 1:1 returns messages (was rejected pre-Pass 12)
+- [ ] Smoke: `send_message` to Grooming JID succeeds
+- [ ] Smoke: `send_message` to non-allowlisted JID returns `recipient not in send allowlist` error
+- [ ] `#1609` reopened in `DaveX2001/deliverable-tracking` with completion comment
 
 ---
 

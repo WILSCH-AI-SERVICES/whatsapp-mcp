@@ -1,14 +1,19 @@
-"""WhatsApp MCP server entry point — read-only, allowlist-enforced.
+"""WhatsApp MCP server entry point — allowlist-enforced read + send.
 
 Patched from upstream lharries/whatsapp-mcp:
   - Transport swapped from stdio to streamable-http (host/port via env).
-  - Send tools (send_message, send_file, send_audio_message) stripped.
-  - JID allowlist enforced via WHATSAPP_ALLOWED_JIDS env (comma-separated).
-    Empty allowlist = permissive (install-time discovery mode).
+  - Read allowlist enforced via WHATSAPP_ALLOWED_JIDS (comma-separated).
+    Empty = permissive (install-time discovery mode).
+  - Send allowlist enforced via WHATSAPP_SEND_ALLOWED_JIDS (comma-separated).
+    Empty = block all sends (security default — opposite of read).
+  - Tool surface kept at upstream parity. Per-client tool toggling is delegated
+    to MetaMCP UI rather than handled here.
 
 Design Context:
-  Allowlist applies at MCP boundary, not at WhatsApp bridge. Bridge still
-  ingests all messages into SQLite — MCP is the firewall Claude sees through.
+  Allowlist applies at MCP boundary, not at WhatsApp bridge. Bridge ingests
+  all messages into SQLite — MCP is the firewall Claude sees through.
+  Read and send allowlists are independent: a JID can be in one, the other,
+  both, or neither.
 """
 import os
 from typing import List, Dict, Any, Optional
@@ -23,15 +28,30 @@ from whatsapp import (
     get_last_interaction as whatsapp_get_last_interaction,
     get_message_context as whatsapp_get_message_context,
     download_media as whatsapp_download_media,
+    send_message as whatsapp_send_message,
+    send_file as whatsapp_send_file,
+    send_audio_message as whatsapp_send_audio_message,
 )
 
 ALLOWED_JIDS = {j.strip() for j in os.getenv("WHATSAPP_ALLOWED_JIDS", "").split(",") if j.strip()}
 ALLOWLIST_ACTIVE = bool(ALLOWED_JIDS)
 
+SEND_ALLOWED_JIDS = {j.strip() for j in os.getenv("WHATSAPP_SEND_ALLOWED_JIDS", "").split(",") if j.strip()}
+
 
 def _reject_if_blocked(chat_jid: Optional[str]) -> Optional[Dict[str, Any]]:
     if ALLOWLIST_ACTIVE and chat_jid and chat_jid not in ALLOWED_JIDS:
         return {"error": "chat_jid not in allowlist", "chat_jid": chat_jid}
+    return None
+
+
+def _reject_send_if_blocked(recipient: str) -> Optional[Dict[str, Any]]:
+    """Send-side gate. Empty SEND_ALLOWED_JIDS = block all (security default)."""
+    if recipient not in SEND_ALLOWED_JIDS:
+        return {
+            "success": False,
+            "message": f"recipient not in send allowlist: {recipient}",
+        }
     return None
 
 
@@ -200,6 +220,54 @@ def download_media(message_id: str, chat_jid: str) -> Dict[str, Any]:
     if file_path:
         return {"success": True, "message": "Media downloaded successfully", "file_path": file_path}
     return {"success": False, "message": "Failed to download media"}
+
+
+@mcp.tool()
+def send_message(recipient: str, message: str) -> Dict[str, Any]:
+    """Send a WhatsApp text message.
+
+    Recipient is a JID (e.g. `4915xxx@s.whatsapp.net` or `123@g.us`).
+    Send is gated by WHATSAPP_SEND_ALLOWED_JIDS — empty = block all.
+    """
+    if not recipient:
+        return {"success": False, "message": "Recipient must be provided"}
+    blocked = _reject_send_if_blocked(recipient)
+    if blocked:
+        return blocked
+    success, status_message = whatsapp_send_message(recipient, message)
+    return {"success": success, "message": status_message}
+
+
+@mcp.tool()
+def send_file(recipient: str, media_path: str) -> Dict[str, Any]:
+    """Send a file (image, video, document) via WhatsApp.
+
+    Recipient is a JID. Media path is absolute path on the bridge container.
+    Send is gated by WHATSAPP_SEND_ALLOWED_JIDS.
+    """
+    if not recipient:
+        return {"success": False, "message": "Recipient must be provided"}
+    blocked = _reject_send_if_blocked(recipient)
+    if blocked:
+        return blocked
+    success, status_message = whatsapp_send_file(recipient, media_path)
+    return {"success": success, "message": status_message}
+
+
+@mcp.tool()
+def send_audio_message(recipient: str, media_path: str) -> Dict[str, Any]:
+    """Send an audio file as a WhatsApp PTT voice message.
+
+    If conversion fails due to missing ffmpeg, use send_file instead.
+    Send is gated by WHATSAPP_SEND_ALLOWED_JIDS.
+    """
+    if not recipient:
+        return {"success": False, "message": "Recipient must be provided"}
+    blocked = _reject_send_if_blocked(recipient)
+    if blocked:
+        return blocked
+    success, status_message = whatsapp_send_audio_message(recipient, media_path)
+    return {"success": success, "message": status_message}
 
 
 if __name__ == "__main__":

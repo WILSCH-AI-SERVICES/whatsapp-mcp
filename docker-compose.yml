@@ -14,6 +14,7 @@ services:
     restart: unless-stopped
     environment:
       - WHATSAPP_ALLOWED_JIDS=${WHATSAPP_ALLOWED_JIDS:-}
+      - WHATSAPP_SEND_ALLOWED_JIDS=${WHATSAPP_SEND_ALLOWED_JIDS:-}
       - WHATSAPP_MCP_HOST=0.0.0.0
       - WHATSAPP_MCP_PORT=8090
     volumes:
